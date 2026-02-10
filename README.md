@@ -2,7 +2,6 @@
 
 A modern TUI to find and delete heavy dev artifacts across languages and platforms.
 
-![screenshot](./screenshot.png)
 
 ## Usage
 
