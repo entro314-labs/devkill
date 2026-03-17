@@ -1,0 +1,20 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    git \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r app && useradd -r -g app app
+
+# GoReleaser v2 places binaries in subdirectories matching the target platform
+ARG TARGETPLATFORM
+COPY ${TARGETPLATFORM}/devkill /usr/local/bin/devkill
+RUN chmod +x /usr/local/bin/devkill
+
+USER app
+WORKDIR /workspace
+
+ENTRYPOINT ["/usr/local/bin/devkill"]
+CMD ["--help"]

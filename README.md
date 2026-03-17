@@ -94,3 +94,32 @@ Example:
 Make sure you have a [Go Toolchain](https://go.dev/dl/) installed on your system.
 
 `$ go build .` produces the executable.
+
+## Release pipeline
+
+Releases are fully automated through GitHub Actions + GoReleaser (`.github/workflows/release.yml` and `.goreleaser.yaml`).
+
+On version tags (`v*.*.*`), the pipeline will:
+
+- run tests and dependency verification
+- build multi-platform binaries (Linux, macOS, Windows on amd64/arm64)
+- create checksums and SBOM artifacts
+- publish a GitHub Release
+- publish/update package manager artifacts for:
+	- Homebrew Cask (`homebrew_casks`)
+	- AUR (`aurs`)
+	- Winget (`winget`, via PR workflow)
+
+### Required repository secrets
+
+Configure these in GitHub repository secrets before your first publish:
+
+- `GITHUB_TOKEN` (provided by Actions for this repository)
+- `HOMEBREW_TAP_GITHUB_TOKEN` (PAT with write access to your tap repository)
+- `AUR_SSH_PRIVATE_KEY` (SSH key for your AUR package repository)
+- `WINGET_GITHUB_TOKEN` (PAT for your `winget-pkgs` fork)
+
+### Homebrew note
+
+GoReleaser `brews` is deprecated; this project is configured with `homebrew_casks`.
+

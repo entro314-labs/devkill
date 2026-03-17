@@ -1,0 +1,82 @@
+# Winget manifest for devkill
+# To submit: Fork microsoft/winget-pkgs, add this to manifests/g/devkill/devkill/version/
+# Then create a pull request
+
+PackageIdentifier: devkill.devkill
+PackageVersion: 1.0.0  # Update this for each release
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0
+
+---
+
+PackageIdentifier: devkill.devkill
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: entro314-labs
+PublisherUrl: https://github.com/entro314-labs
+PublisherSupportUrl: https://github.com/entro314-labs/devkill/issues
+Author: entro314-labs
+PackageName: devkill
+PackageUrl: https://github.com/entro314-labs/devkill
+License: MIT
+LicenseUrl: https://github.com/entro314-labs/devkill/blob/main/LICENSE
+Copyright: Copyright (c) 2025 entro314-labs
+CopyrightUrl: https://github.com/entro314-labs/devkill/blob/main/LICENSE
+ShortDescription: A concurrent Git repository management tool
+Description: |
+  devkill is a robust, concurrent Git repository management tool written in Go.
+  It allows you to perform bulk fetch or pull operations across multiple Git
+  repositories in a directory tree with configurable worker pools, safety features,
+  and detailed reporting.
+Moniker: devkill
+Tags:
+  - git
+  - repository
+  - management
+  - concurrent
+  - bulk
+  - fetch
+  - pull
+  - cli
+  - tool
+  - go
+  - golang
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
+
+---
+
+PackageIdentifier: devkill.devkill
+PackageVersion: 1.0.0
+Platform:
+  - Windows.Desktop
+MinimumOSVersion: 10.0.0.0
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+UpgradeBehavior: install
+Commands:
+  - devkill
+FileExtensions:
+  - git
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    InstallerUrl: https://github.com/entro314-labs/devkill/releases/download/v1.0.0/devkill_1.0.0_windows_amd64.zip
+    InstallerSha256: # Update with actual SHA256 from release
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: devkill.exe
+        PortableCommandAlias: devkill
+  - Architecture: arm64
+    InstallerType: zip
+    InstallerUrl: https://github.com/entro314-labs/devkill/releases/download/v1.0.0/devkill_1.0.0_windows_arm64.zip
+    InstallerSha256: # Update with actual SHA256 from release
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: devkill.exe
+        PortableCommandAlias: devkill
+ManifestType: installer
+ManifestVersion: 1.6.0

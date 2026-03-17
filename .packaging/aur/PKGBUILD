@@ -1,0 +1,68 @@
+# Maintainer: entro314-labs <noreply@github.com>
+# AUR Package for devkill
+#
+# To submit to AUR:
+# 1. Clone: git clone ssh://aur@aur.archlinux.org/devkill.git
+# 2. Copy this PKGBUILD to the cloned directory
+# 3. Generate .SRCINFO: makepkg --printsrcinfo > .SRCINFO
+# 4. Commit and push: git add PKGBUILD .SRCINFO && git commit -m "Initial commit" && git push
+
+pkgname=devkill
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="A concurrent Git repository management tool written in Go"
+arch=('x86_64' 'aarch64')
+url="https://github.com/entro314-labs/devkill"
+license=('MIT')
+depends=('git')
+makedepends=('go')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/entro314-labs/devkill/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')  # Update with actual checksum
+
+# 2025 AUR Convention: Use 0BSD license for package sources
+# SPDX-License-Identifier: 0BSD
+
+prepare() {
+    cd "$srcdir/devkill-$pkgver"
+    # Tidy modules
+    go mod download
+    go mod tidy
+}
+
+build() {
+    cd "$srcdir/devkill-$pkgver"
+
+    # Build flags following Go conventions
+    export CGO_ENABLED=0
+    export GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw"
+
+    # Build the binary
+    go build \
+        -ldflags "-s -w -X main.version=$pkgver -extldflags '$LDFLAGS'" \
+        -o devkill \
+        ./cmd/devkill
+}
+
+check() {
+    cd "$srcdir/devkill-$pkgver"
+
+    # Run tests
+    go test -race ./...
+
+    # Test the built binary
+    ./devkill --help
+}
+
+package() {
+    cd "$srcdir/devkill-$pkgver"
+
+    # Install binary
+    install -Dm755 devkill "$pkgdir/usr/bin/devkill"
+
+    # Install documentation
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # Install configuration example
+    install -Dm644 devkill.yaml "$pkgdir/usr/share/doc/$pkgname/devkill.yaml.example"
+}

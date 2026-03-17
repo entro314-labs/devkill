@@ -1,0 +1,87 @@
+# devkill Configuration File
+# Place this file in your working directory or ~/.config/devkill/
+
+# Operation to perform: "fetch", "pull", or "scan"
+# fetch: Download changes without merging (safe, recommended)
+# pull: Download and merge changes (requires clean working directory)
+# scan: Analyze repositories (use with export-scan)
+operation: fetch
+
+# Number of concurrent workers to use
+# Higher values = faster processing but more resource usage
+# Recommended: 5-20 depending on your system and network
+workers: 10
+
+# Dry run mode (no changes are applied)
+dry-run: false
+
+# Process repositories recursively in subdirectories
+# true: Find repos in all subdirectories
+# false: Only process repos in immediate subdirectories
+recursive: true
+
+# Whether to skip repositories with uncommitted changes
+# true: Skip dirty repos (recommended for pull operations)
+# false: Attempt operation on all repos
+skip-dirty: true
+
+# Enable verbose logging for debugging
+# true: Show detailed operation logs
+# false: Show only results and errors
+verbose: false
+
+# Use plain text output instead of TUI
+plain: false
+
+# Display full summary of all repositories
+full-summary: false
+
+# Save detailed report to file (empty string disables)
+save-report: ""
+
+# File patterns to discard before pull/fetch (empty list disables)
+discard-files: []
+
+# Export repository scan to markdown file (requires operation: scan)
+export-scan: ""
+
+# Overall timeout for the entire operation
+# Format: duration string (e.g., "5m", "30s", "1h30m")
+timeout: 10m
+
+# Directories to exclude from repository discovery
+# These patterns will be matched against directory paths
+exclude:
+  - .git           # Git metadata directory
+  - node_modules   # Node.js dependencies
+  - vendor         # Go/PHP dependencies
+  - target         # Java/Maven build directory
+  - dist           # Distribution/build output
+  - build          # General build directory
+  - .vscode        # VS Code settings
+  - .idea          # IntelliJ IDEA settings
+  - __pycache__    # Python cache
+  - .pytest_cache  # Pytest cache
+  - .coverage      # Coverage reports
+  - .tox           # Tox environments
+
+# Example advanced configuration for different use cases:
+
+# For large monorepos or slow networks:
+# workers: 5
+# timeout: 30m
+
+# For fast local operations:
+# workers: 20
+# timeout: 2m
+
+# For CI/CD environments:
+# verbose: true
+# skip-dirty: false
+# timeout: 15m
+
+# For development environments with many repos:
+# operation: fetch
+# workers: 15
+# skip-dirty: true
+# recursive: true

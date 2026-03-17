@@ -1,0 +1,232 @@
+version: 2
+
+project_name: devkill
+
+env:
+  - GO111MODULE=on
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+    - go test ./...
+
+builds:
+  - id: devkill
+    main: .
+    binary: devkill
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- if eq .Os "darwin" }}macOS
+      {{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: github-native
+  sort: asc
+  groups:
+    - title: "🚀 Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "🐛 Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "⚡ Performance"
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "📚 Docs"
+      regexp: '^.*?docs?(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: "Other Changes"
+      order: 999
+  filters:
+    exclude:
+      - '^chore:'
+      - '^style:'
+      - '^test:'
+      - '^ci:'
+      - '^Merge '
+
+release:
+  github:
+    owner: entro314-labs
+    name: devkill
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## devkill {{ .Tag }}
+
+    Built from commit `{{ .FullCommit }}` on {{ .Date }}.
+  footer: |
+    ### Install
+
+    - Homebrew: `brew install entro314-labs/tap/devkill`
+    - Go: `go install github.com/entro314-labs/devkill@{{ .Tag }}`
+    - Docker: `docker pull ghcr.io/entro314-labs/devkill:{{ .Version }}`
+
+homebrew_casks:
+  - name: devkill
+    ids:
+      - default
+    repository:
+      owner: entro314-labs
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/entro314-labs/devkill
+    description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
+    license: MIT
+    binaries:
+      - devkill
+    commit_msg_template: "Homebrew cask update for {{ .ProjectName }} version {{ .Tag }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    skip_upload: auto
+
+aurs:
+  - name: devkill-bin
+    ids:
+      - default
+    homepage: https://github.com/entro314-labs/devkill
+    description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
+    license: MIT
+    maintainers:
+      - "entro314-labs <noreply@github.com>"
+    private_key: "{{ .Env.AUR_SSH_PRIVATE_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/devkill-bin.git"
+    provides:
+      - devkill
+    conflicts:
+      - devkill
+    commit_msg_template: "Update to {{ .Tag }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    skip_upload: auto
+    disable: "{{ .IsSnapshot }}"
+
+winget:
+  - name: devkill
+    ids:
+      - default
+    publisher: entro314-labs
+    publisher_url: https://github.com/entro314-labs
+    publisher_support_url: https://github.com/entro314-labs/devkill/issues
+    package_identifier: Entro314Labs.devkill
+    short_description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
+    description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
+    homepage: https://github.com/entro314-labs/devkill
+    license: MIT
+    license_url: https://github.com/entro314-labs/devkill/blob/main/LICENSE
+    tags:
+      - cli
+      - developer-tools
+      - disk-cleanup
+      - productivity
+    repository:
+      owner: entro314-labs
+      name: winget-pkgs
+      branch: "devkill-{{ .Version }}"
+      token: "{{ .Env.WINGET_GITHUB_TOKEN }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+    commit_msg_template: "{{ .PackageIdentifier }}: {{ .Tag }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    skip_upload: auto
+
+nfpms:
+  - id: packages
+    package_name: devkill
+    file_name_template: "{{ .ConventionalFileName }}"
+    homepage: https://github.com/entro314-labs/devkill
+    description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
+    maintainer: "entro314-labs"
+    license: MIT
+    vendor: entro314-labs
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+
+dockers_v2:
+  - ids:
+      - devkill
+    dockerfile: Dockerfile.goreleaser
+    images:
+      - ghcr.io/entro314-labs/devkill
+    tags:
+      - "{{ .Version }}"
+      - latest
+      - "{{ .Version }}-amd64"
+      - "{{ .Version }}-arm64"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    disable: "{{ .IsSnapshot }}"
+    flags:
+      - "--pull"
+    labels:
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.title": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "https://github.com/entro314-labs/devkill"
+
+sboms:
+  - id: archive
+    artifacts: archive
+  - id: source
+    artifacts: source
+
+source:
+  enabled: true
+  name_template: "{{ .ProjectName }}_{{ .Version }}_source"
+  format: tar.gz
+
+metadata:
+  mod_timestamp: '{{ .CommitTimestamp }}'

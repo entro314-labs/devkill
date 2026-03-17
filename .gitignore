@@ -1,3 +1,7 @@
 npkill*
 .DS_Store
 .nope/
+.env
+.env.*
+devkill
+dist

@@ -1,5 +1,5 @@
 {
-    "go.goroot": "/Users/dominikospritis/.local/share/mise/installs/go/1.26.0",
+    "go.goroot": "/Users/dominikospritis/.local/share/mise/installs/go/1.26.1",
     "debug.javascript.defaultRuntimeExecutable": {
         "pwa-node": "/Users/dominikospritis/.local/share/mise/shims/node"
     },
@@ -7,5 +7,11 @@
     "go.alternateTools": {
         "go": "/Users/dominikospritis/.local/share/mise/shims/go",
         "gopls": "/Users/dominikospritis/.local/share/mise/shims/gopls"
-    }
+    },
+    "ruff.path": [
+        "/Users/dominikospritis/.local/share/mise/shims/ruff"
+    ],
+    "ruff.interpreter": [
+        "/Users/dominikospritis/.local/share/mise/shims/python"
+    ]
 }
