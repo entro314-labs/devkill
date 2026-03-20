@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,6 +25,7 @@ type rowData struct {
 	Target    string
 	Category  string
 	SizeBytes int64
+	SizeErr   string
 	Marked    bool
 	Deleted   bool
 	DeleteErr string
@@ -85,6 +87,7 @@ type scanFinishedMsg struct {
 	Elapsed  time.Duration
 	Visited  int
 	Found    int
+	Workers  int
 }
 
 type scanPulseMsg struct{}
@@ -102,6 +105,20 @@ type deleteResult struct {
 
 type deleteResultMsg struct {
 	Result deleteResult
+}
+
+type cleanupSummary struct {
+	CompletedAt  time.Time
+	Requested    int
+	Deleted      int
+	Failed       int
+	FreedBytes   int64
+	PlannedBytes int64
+	Duration     time.Duration
+	Failures     []string
+	FailureKinds map[string]int
+	ByCategory   map[string]int64
+	ByCatCount   map[string]int
 }
 
 type keyMap struct {
@@ -210,6 +227,8 @@ type model struct {
 	deleteTotal    int
 	deleteDone     int
 	deleteErrors   int
+	deleteStart    time.Time
+	cleanup        cleanupSummary
 }
 
 type styles struct {
@@ -253,7 +272,7 @@ func NewModel(ctx context.Context, opts ScanOptions, confirmDeletes bool) model 
 		{Title: "Size", Width: 10},
 		{Title: "Target", Width: 14},
 		{Title: "Category", Width: 12},
-		{Title: "Status", Width: 10},
+		{Title: "Status", Width: 12},
 	}
 
 	t := table.New(
@@ -369,7 +388,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sortRows()
 		m.setTableRows()
 		if msg.Err == nil {
-			m.lastEvent = fmt.Sprintf("Scan complete: %d items", len(m.rows))
+			m.lastEvent = fmt.Sprintf("Scan complete: %d items · sizing workers: %d", len(m.rows), msg.Workers)
 		} else {
 			m.lastEvent = fmt.Sprintf("Scan failed: %v", msg.Err)
 		}
@@ -506,7 +525,7 @@ func (m *model) updateLayout(width, height int) {
 	sizeWidth := 10
 	targetWidth := 16
 	categoryWidth := 12
-	statusWidth := 10
+	statusWidth := 12
 	pathWidth := max(width-sizeWidth-targetWidth-categoryWidth-statusWidth-12, 20)
 
 	m.table.SetColumns([]table.Column{
@@ -546,6 +565,7 @@ func (m model) startScan() (model, []tea.Cmd) {
 	m.scanStart = time.Now()
 	m.scanPulse = 0
 	m.scanPulseDir = 1
+	m.cleanup = cleanupSummary{}
 	m.lastEvent = "Scanning…"
 	m.setTableRows()
 
@@ -599,8 +619,46 @@ func (m model) statusView() string {
 		progressLine := fmt.Sprintf("Deleting %d/%d", m.deleteDone, m.deleteTotal)
 		bar := m.deleteProgress.View()
 		lines = append(lines, ui.muted.Render(progressLine), ui.muted.Render(bar))
+	} else if m.cleanup.Requested > 0 {
+		lines = append(lines, m.cleanupSummaryView())
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+func (m model) cleanupSummaryView() string {
+	heading := ui.accent.Render("Cleanup complete")
+	if m.cleanup.Failed > 0 {
+		heading = ui.warning.Render("Cleanup finished with issues")
+	}
+
+	planned := m.cleanup.PlannedBytes
+	if planned <= 0 {
+		planned = m.cleanup.FreedBytes
+	}
+
+	summary := fmt.Sprintf(
+		"Freed %s (planned %s) · Deleted %d/%d · Failed %d · Duration %s",
+		formatBytes(m.cleanup.FreedBytes),
+		formatBytes(planned),
+		m.cleanup.Deleted,
+		m.cleanup.Requested,
+		m.cleanup.Failed,
+		m.cleanup.Duration.Truncate(100*time.Millisecond),
+	)
+
+	lines := []string{heading, ui.status.Render(summary)}
+	if breakdown := formatCategoryBreakdown(m.cleanup.ByCategory, m.cleanup.ByCatCount); breakdown != "" {
+		lines = append(lines, ui.muted.Render("By category: "+breakdown))
+	}
+	if failures := formatFailureKinds(m.cleanup.FailureKinds); failures != "" {
+		lines = append(lines, ui.warning.Render("Failure reasons: "+failures))
+	}
+	if len(m.cleanup.Failures) > 0 {
+		lines = append(lines, ui.warning.Render("Failed paths: "+strings.Join(m.cleanup.Failures, ", ")))
+	}
+	lines = append(lines, ui.muted.Render("Completed at "+m.cleanup.CompletedAt.Format(time.Kitchen)))
+
+	return ui.base.Copy().Padding(0, 1).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
 func (m model) footerView() string {
@@ -622,14 +680,7 @@ func (m model) footerView() string {
 func (m *model) setTableRows() {
 	rows := make([]table.Row, 0, len(m.rows))
 	for _, row := range m.rows {
-		status := ui.muted.Render("ready")
-		if row.DeleteErr != "" {
-			status = ui.danger.Render("error")
-		} else if row.Deleted {
-			status = ui.danger.Render("deleted")
-		} else if row.Marked {
-			status = ui.accent.Render("queued")
-		}
+		status := renderStatusCell(row)
 		rows = append(rows, table.Row{
 			row.RelPath,
 			formatBytes(row.SizeBytes),
@@ -639,6 +690,21 @@ func (m *model) setTableRows() {
 		})
 	}
 	m.table.SetRows(rows)
+}
+
+func renderStatusCell(row rowData) string {
+	switch {
+	case row.DeleteErr != "":
+		return ui.danger.Render("FAILED")
+	case row.Deleted:
+		return ui.danger.Render("DELETED")
+	case row.Marked:
+		return ui.accent.Render("QUEUED")
+	case row.SizeErr != "":
+		return ui.warning.Render("SIZE ERR")
+	default:
+		return ui.muted.Render("READY")
+	}
 }
 
 func (m *model) sortRows() {
@@ -796,7 +862,17 @@ func (m *model) applyDeleteResult(result deleteResult) tea.Cmd {
 		if result.Err != nil {
 			m.rows[idx].DeleteErr = result.Err.Error()
 			m.deleteErrors++
+			m.cleanup.Failed++
+			reason := classifyDeleteFailure(result.Err)
+			m.cleanup.FailureKinds[reason]++
+			if len(m.cleanup.Failures) < 3 {
+				m.cleanup.Failures = append(m.cleanup.Failures, fmt.Sprintf("%s (%s)", result.Path, reason))
+			}
 		} else {
+			m.cleanup.Deleted++
+			m.cleanup.FreedBytes += m.rows[idx].SizeBytes
+			m.cleanup.ByCategory[m.rows[idx].Category] += m.rows[idx].SizeBytes
+			m.cleanup.ByCatCount[m.rows[idx].Category]++
 			m.rows[idx].Deleted = true
 			m.rows[idx].Marked = false
 			m.rows[idx].DeleteErr = ""
@@ -813,10 +889,12 @@ func (m *model) applyDeleteResult(result deleteResult) tea.Cmd {
 		if m.deleteDone >= m.deleteTotal {
 			m.deleting = false
 			m.deleteQueue = nil
+			m.cleanup.CompletedAt = time.Now()
+			m.cleanup.Duration = time.Since(m.deleteStart)
 			if m.deleteErrors > 0 {
-				m.lastEvent = fmt.Sprintf("Deleted %d item(s), %d failed", m.deleteTotal-m.deleteErrors, m.deleteErrors)
+				m.lastEvent = fmt.Sprintf("Cleanup finished: %d deleted, %d failed, freed %s", m.cleanup.Deleted, m.cleanup.Failed, formatBytes(m.cleanup.FreedBytes))
 			} else {
-				m.lastEvent = fmt.Sprintf("Deleted %d item(s)", m.deleteTotal)
+				m.lastEvent = fmt.Sprintf("Cleanup complete: %d deleted, freed %s", m.cleanup.Deleted, formatBytes(m.cleanup.FreedBytes))
 			}
 			return progressCmd
 		}
@@ -831,14 +909,94 @@ func (m *model) startDelete(paths []string) tea.Cmd {
 	if len(paths) == 0 || m.deleting {
 		return nil
 	}
+	plannedBytes := int64(0)
+	for _, path := range paths {
+		if idx := m.findRow(path); idx != -1 {
+			plannedBytes += m.rows[idx].SizeBytes
+		}
+	}
+
 	m.deleting = true
 	m.deleteQueue = paths
 	m.deleteTotal = len(paths)
 	m.deleteDone = 0
 	m.deleteErrors = 0
+	m.deleteStart = time.Now()
+	m.cleanup = cleanupSummary{
+		Requested:    len(paths),
+		PlannedBytes: plannedBytes,
+		FailureKinds: map[string]int{},
+		ByCategory:   map[string]int64{},
+		ByCatCount:   map[string]int{},
+	}
 	m.lastEvent = fmt.Sprintf("Deleting %d item(s)…", len(paths))
 	progressCmd := m.deleteProgress.SetPercent(0)
 	return tea.Batch(progressCmd, deleteCmd(m.scanOpts.RootHandle, paths[0]))
+}
+
+func classifyDeleteFailure(err error) string {
+	if err == nil {
+		return "unknown"
+	}
+	switch {
+	case errors.Is(err, fs.ErrPermission), errors.Is(err, os.ErrPermission):
+		return "permission denied"
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, os.ErrNotExist):
+		return "path not found"
+	default:
+		return "filesystem error"
+	}
+}
+
+func formatCategoryBreakdown(byCategory map[string]int64, byCatCount map[string]int) string {
+	if len(byCategory) == 0 {
+		return ""
+	}
+	type item struct {
+		name  string
+		bytes int64
+		count int
+	}
+	items := make([]item, 0, len(byCategory))
+	for name, bytes := range byCategory {
+		items = append(items, item{name: name, bytes: bytes, count: byCatCount[name]})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].bytes == items[j].bytes {
+			return items[i].name < items[j].name
+		}
+		return items[i].bytes > items[j].bytes
+	})
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
+		parts = append(parts, fmt.Sprintf("%s %s (%d)", it.name, formatBytes(it.bytes), it.count))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatFailureKinds(kinds map[string]int) string {
+	if len(kinds) == 0 {
+		return ""
+	}
+	type item struct {
+		reason string
+		count  int
+	}
+	items := make([]item, 0, len(kinds))
+	for reason, count := range kinds {
+		items = append(items, item{reason: reason, count: count})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].count == items[j].count {
+			return items[i].reason < items[j].reason
+		}
+		return items[i].count > items[j].count
+	})
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
+		parts = append(parts, fmt.Sprintf("%s×%d", it.reason, it.count))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func (m *model) applyRecalcResult(msg recalcSizeMsg) {

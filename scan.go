@@ -7,7 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,6 +32,29 @@ func defaultSkipDirs() map[string]struct{} {
 	}
 }
 
+type scanCandidate struct {
+	Index int
+	Path  string
+	Def   TargetDef
+}
+
+type scanSizeResult struct {
+	Candidate scanCandidate
+	Size      int64
+	Err       error
+}
+
+func defaultScanWorkers() int {
+	workers := runtime.NumCPU()
+	if workers < 2 {
+		return 2
+	}
+	if workers > 12 {
+		return 12
+	}
+	return workers
+}
+
 func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea.Msg) {
 	defer close(out)
 
@@ -41,6 +67,8 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 	warnings := []string{}
 	visited := 0
 	found := 0
+	workers := defaultScanWorkers()
+	candidates := []scanCandidate{}
 	lastProgress := time.Now()
 
 	sendProgress := func(force bool) {
@@ -83,25 +111,12 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 			}
 
 			if def, ok := opts.Targets[name]; ok {
-				size, sizeErr := dirSize(ctx, opts.RootHandle, path)
-				if sizeErr != nil {
-					if errors.Is(sizeErr, fs.ErrPermission) {
-						warnings = append(warnings, fmt.Sprintf("permission denied: %s", filepath.FromSlash(path)))
-						return fs.SkipDir
-					}
-					return sizeErr
-				}
 				found++
-				rel := filepath.FromSlash(path)
-				out <- scanRowMsg{
-					ID: id,
-					Row: rowData{
-						RelPath:   rel,
-						Target:    def.Name,
-						Category:  def.Category,
-						SizeBytes: size,
-					},
-				}
+				candidates = append(candidates, scanCandidate{
+					Index: len(candidates),
+					Path:  path,
+					Def:   def,
+				})
 				sendProgress(true)
 				return fs.SkipDir
 			}
@@ -114,6 +129,29 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 		err = nil
 	}
 
+	if err == nil && len(candidates) > 0 {
+		results := sizeTargetsConcurrently(ctx, opts, candidates, workers)
+		for _, result := range results {
+			if result.Err != nil {
+				reason := classifyScanFailure(result.Err)
+				warnings = append(warnings, fmt.Sprintf("size %s: %s (%v)", reason, filepath.FromSlash(result.Candidate.Path), result.Err))
+			}
+
+			row := rowData{
+				RelPath:   filepath.FromSlash(result.Candidate.Path),
+				Target:    result.Candidate.Def.Name,
+				Category:  result.Candidate.Def.Category,
+				SizeBytes: result.Size,
+			}
+			if result.Err != nil {
+				row.SizeErr = result.Err.Error()
+			}
+
+			out <- scanRowMsg{ID: id, Row: row}
+			sendProgress(true)
+		}
+	}
+
 	sendProgress(true)
 	out <- scanFinishedMsg{
 		ID:       id,
@@ -122,6 +160,83 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 		Elapsed:  time.Since(start),
 		Visited:  visited,
 		Found:    found,
+		Workers:  workers,
+	}
+}
+
+func sizeTargetsConcurrently(ctx context.Context, opts ScanOptions, candidates []scanCandidate, workers int) []scanSizeResult {
+	if len(candidates) == 0 {
+		return nil
+	}
+	if workers <= 0 {
+		workers = 1
+	}
+
+	jobs := make(chan scanCandidate)
+	results := make(chan scanSizeResult, len(candidates))
+
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for candidate := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+
+				size, err := dirSize(ctx, opts.RootHandle, candidate.Path)
+				if errors.Is(err, context.Canceled) {
+					return
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				case results <- scanSizeResult{Candidate: candidate, Size: size, Err: err}:
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, candidate := range candidates {
+			if ctx.Err() != nil {
+				return
+			}
+			jobs <- candidate
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	output := make([]scanSizeResult, 0, len(candidates))
+	for result := range results {
+		output = append(output, result)
+	}
+
+	sort.Slice(output, func(i, j int) bool {
+		return output[i].Candidate.Index < output[j].Candidate.Index
+	})
+
+	return output
+}
+
+func classifyScanFailure(err error) string {
+	if err == nil {
+		return "unknown"
+	}
+	switch {
+	case errors.Is(err, fs.ErrPermission), errors.Is(err, os.ErrPermission):
+		return "permission denied"
+	case errors.Is(err, fs.ErrNotExist), errors.Is(err, os.ErrNotExist):
+		return "path not found"
+	default:
+		return "scan error"
 	}
 }
 
