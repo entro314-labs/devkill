@@ -97,7 +97,7 @@ release:
   footer: |
     ### Install
 
-    - Homebrew: `brew install --cask entro314-labs/tap/devkill`
+    - Homebrew: `brew install --cask entro314-labs/homebrew-tap/devkill`
     - Go: `go install github.com/entro314-labs/devkill@{{ .Tag }}`
     - Docker: `docker pull ghcr.io/entro314-labs/devkill:{{ .Version }}`
 

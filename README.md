@@ -9,7 +9,7 @@ A modern TUI to find and delete heavy dev artifacts across languages and platfor
 
 #### Homebrew (tap)
 
-`$ brew install --cask entro314-labs/tap/devkill`
+`$ brew install --cask entro314-labs/homebrew-tap/devkill`
 
 #### Go toolchain
 
