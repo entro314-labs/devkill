@@ -90,7 +90,7 @@ repos:
 
   # Go linting with golangci-lint
   - repo: https://github.com/golangci/golangci-lint
-    rev: v2.8.0
+    rev: v2.11.3
     hooks:
       - id: golangci-lint
         args: [--fix]
@@ -105,7 +105,7 @@ repos:
 
   # Markdown
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.47.0
+    rev: v0.48.0
     hooks:
       - id: markdownlint
         args: [--fix]
@@ -120,7 +120,7 @@ repos:
 
   # Git commit message format
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.3.0
+    rev: v4.4.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]

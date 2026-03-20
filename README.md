@@ -7,6 +7,10 @@ A modern TUI to find and delete heavy dev artifacts across languages and platfor
 
 ### Installation
 
+#### Homebrew (tap)
+
+`$ brew install --cask entro314-labs/tap/devkill`
+
 #### Go toolchain
 
 `$ go install github.com/entro314-labs/devkill@latest`
@@ -15,7 +19,7 @@ A modern TUI to find and delete heavy dev artifacts across languages and platfor
 
 Download a binary from the Releases tab and place it in your `$PATH`.
 
-### Starting npkill
+### Starting devkill
 
 `$ devkill <directory>` opens devkill in a directory _relative_ to `$PWD`.
 
@@ -115,9 +119,9 @@ On version tags (`v*.*.*`), the pipeline will:
 Configure these in GitHub repository secrets before your first publish:
 
 - `GITHUB_TOKEN` (provided by Actions for this repository)
-- `HOMEBREW_TAP_GITHUB_TOKEN` (PAT with write access to your tap repository)
-- `AUR_SSH_PRIVATE_KEY` (SSH key for your AUR package repository)
-- `WINGET_GITHUB_TOKEN` (PAT for your `winget-pkgs` fork)
+- `HOMEBREW_TAP_GITHUB_TOKEN` (required for Homebrew publishing; PAT with write access to your tap repository)
+- `AUR_SSH_PRIVATE_KEY` (optional; only needed to publish AUR)
+- `WINGET_GITHUB_TOKEN` (optional; only needed to publish Winget)
 
 ### Homebrew note
 

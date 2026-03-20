@@ -97,7 +97,7 @@ release:
   footer: |
     ### Install
 
-    - Homebrew: `brew install entro314-labs/tap/devkill`
+    - Homebrew: `brew install --cask entro314-labs/tap/devkill`
     - Go: `go install github.com/entro314-labs/devkill@{{ .Tag }}`
     - Docker: `docker pull ghcr.io/entro314-labs/devkill:{{ .Version }}`
 
@@ -141,7 +141,7 @@ aurs:
       name: goreleaserbot
       email: bot@goreleaser.com
     skip_upload: auto
-    disable: "{{ .IsSnapshot }}"
+    disable: '{{ or .IsSnapshot (eq .Env.AUR_SSH_PRIVATE_KEY "") }}'
 
 winget:
   - name: devkill
@@ -176,7 +176,7 @@ winget:
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
-    skip_upload: auto
+    skip_upload: '{{ or .IsSnapshot (eq .Env.WINGET_GITHUB_TOKEN "") }}'
 
 nfpms:
   - id: packages
