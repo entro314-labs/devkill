@@ -184,5 +184,6 @@ jobs:
       - name: Verify Docker image
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          docker pull ghcr.io/${{ github.repository }}:${TAG}
-          docker run --rm ghcr.io/${{ github.repository }}:${TAG} --list-targets | head -n 1
+          VERSION="${TAG#v}"
+          docker pull ghcr.io/${{ github.repository }}:${VERSION}
+          docker run --rm ghcr.io/${{ github.repository }}:${VERSION} --list-targets | head -n 1
