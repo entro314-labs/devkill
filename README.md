@@ -119,7 +119,7 @@ On version tags (`v*.*.*`), the pipeline will:
 Configure these in GitHub repository secrets before your first publish:
 
 - `GITHUB_TOKEN` (provided by Actions for this repository)
-- `HOMEBREW_TAP_GITHUB_TOKEN` (required for Homebrew publishing; PAT with write access to your tap repository)
+- `HOMEBREW_TAP_TOKEN` (required for Homebrew publishing; PAT with write access to your tap repository)
 - `AUR_SSH_PRIVATE_KEY` (optional; only needed to publish AUR)
 - `WINGET_GITHUB_TOKEN` (optional; only needed to publish Winget)
 
