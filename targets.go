@@ -93,10 +93,6 @@ var defaultTargets = []TargetDef{
 	{Name: "coverage", Category: "build"},
 }
 
-func buildTargetMap(includeRaw, excludeRaw string) map[string]TargetDef {
-	return buildTargetMapWithList(parseTargetList(includeRaw), parseTargetList(excludeRaw))
-}
-
 func buildTargetMapWithList(includes, excludes []string) map[string]TargetDef {
 	targets := map[string]TargetDef{}
 	for _, def := range defaultTargets {

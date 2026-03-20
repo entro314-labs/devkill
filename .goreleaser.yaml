@@ -109,7 +109,7 @@ homebrew_casks:
       owner: entro314-labs
       name: homebrew-tap
       branch: main
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/entro314-labs/devkill
     description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
     license: MIT
