@@ -1,16 +1,31 @@
+# GoReleaser Configuration — devkill
+# Features: multi-platform builds, Homebrew/Winget/AUR/Docker/nfpms,
+#           SBOM generation, Cosign signing, conditional secret guards
+#
+# Documentation: https://goreleaser.com
+
 version: 2
 
 project_name: devkill
 
+# =============================================================================
+# Environment
+# =============================================================================
 env:
   - GO111MODULE=on
 
+# =============================================================================
+# Before hooks — go test acts as a release gate
+# =============================================================================
 before:
   hooks:
     - go mod tidy
     - go mod verify
     - go test ./...
 
+# =============================================================================
+# Builds
+# =============================================================================
 builds:
   - id: devkill
     main: .
@@ -28,8 +43,23 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=goreleaser
     mod_timestamp: '{{ .CommitTimestamp }}'
 
+# =============================================================================
+# Universal binaries (macOS)
+# =============================================================================
+universal_binaries:
+  - id: devkill-universal
+    name_template: devkill
+    replace: true
+
+# =============================================================================
+# Archives
+# =============================================================================
 archives:
   - id: default
     formats:
@@ -48,31 +78,46 @@ archives:
         formats:
           - zip
     files:
+      - LICENSE*
       - README*
+      - CHANGELOG*
 
+# =============================================================================
+# Checksums
+# =============================================================================
 checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+# =============================================================================
+# Snapshots
+# =============================================================================
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
+# =============================================================================
+# Changelog
+# =============================================================================
 changelog:
-  use: github-native
+  use: github
   sort: asc
+  abbrev: 7
   groups:
-    - title: "🚀 Features"
+    - title: "Features"
       regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
       order: 0
-    - title: "🐛 Fixes"
+    - title: "Bug Fixes"
       regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
       order: 1
-    - title: "⚡ Performance"
-      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
-      order: 2
-    - title: "📚 Docs"
+    - title: "Documentation"
       regexp: '^.*?docs?(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "Performance & Refactors"
+      regexp: '^.*?(perf|refactor)(\([[:word:]]+\))??!?:.+$'
       order: 3
+    - title: "Dependencies"
+      regexp: '^.*?(build|deps?)(\([[:word:]]+\))??!?:.+$'
+      order: 4
     - title: "Other Changes"
       order: 999
   filters:
@@ -81,8 +126,13 @@ changelog:
       - '^style:'
       - '^test:'
       - '^ci:'
-      - '^Merge '
+      - Merge pull request
+      - Merge branch
+      - go mod tidy
 
+# =============================================================================
+# GitHub Release
+# =============================================================================
 release:
   github:
     owner: entro314-labs
@@ -93,14 +143,46 @@ release:
   header: |
     ## devkill {{ .Tag }}
 
-    Built from commit `{{ .FullCommit }}` on {{ .Date }}.
+    **Release Date**: {{ .Date }}
+
   footer: |
-    ### Install
+    ---
 
-    - Homebrew: `brew install --cask entro314-labs/homebrew-tap/devkill`
-    - Go: `go install github.com/entro314-labs/devkill@{{ .Tag }}`
-    - Docker: `docker pull ghcr.io/entro314-labs/devkill:{{ .Version }}`
+    ## Installation
 
+    ### Homebrew (macOS/Linux)
+    ```bash
+    brew install --cask entro314-labs/homebrew-tap/devkill
+    ```
+
+    ### Winget (Windows)
+    ```powershell
+    winget install Entro314Labs.devkill
+    ```
+
+    ### AUR (Arch Linux)
+    ```bash
+    yay -S devkill-bin
+    ```
+
+    ### Go Install
+    ```bash
+    go install github.com/entro314-labs/devkill@{{ .Tag }}
+    ```
+
+    ### Docker
+    ```bash
+    docker pull ghcr.io/entro314-labs/devkill:{{ .Version }}
+    ```
+
+    ### Manual Installation
+    Download the appropriate binary for your platform from the assets below.
+
+    **Full Changelog**: https://github.com/entro314-labs/devkill/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# =============================================================================
+# Homebrew Cask
+# =============================================================================
 homebrew_casks:
   - name: devkill
     ids:
@@ -110,47 +192,29 @@ homebrew_casks:
       name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
     homepage: https://github.com/entro314-labs/devkill
     description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
     license: MIT
+    skip_upload: '{{ or .IsSnapshot (eq .Env.HOMEBREW_TAP_TOKEN "") }}'
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Homebrew Cask update for {{ .ProjectName }} version {{ .Tag }}"
     binaries:
       - devkill
-    commit_msg_template: "Homebrew cask update for {{ .ProjectName }} version {{ .Tag }}"
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
-    skip_upload: auto
 
-aurs:
-  - name: devkill-bin
-    ids:
-      - default
-    homepage: https://github.com/entro314-labs/devkill
-    description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
-    license: MIT
-    maintainers:
-      - "entro314-labs <noreply@github.com>"
-    private_key: "{{ .Env.AUR_SSH_PRIVATE_KEY }}"
-    git_url: "ssh://aur@aur.archlinux.org/devkill-bin.git"
-    provides:
-      - devkill
-    conflicts:
-      - devkill
-    commit_msg_template: "Update to {{ .Tag }}"
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
-    skip_upload: auto
-    disable: '{{ or .IsSnapshot (eq .Env.AUR_SSH_PRIVATE_KEY "") }}'
-
+# =============================================================================
+# Winget (Windows Package Manager) — conditional on WINGET_TOKEN
+# =============================================================================
 winget:
   - name: devkill
     ids:
       - default
+    package_identifier: Entro314Labs.devkill
     publisher: entro314-labs
     publisher_url: https://github.com/entro314-labs
     publisher_support_url: https://github.com/entro314-labs/devkill/issues
-    package_identifier: Entro314Labs.devkill
     short_description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
     description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
     homepage: https://github.com/entro314-labs/devkill
@@ -161,11 +225,12 @@ winget:
       - developer-tools
       - disk-cleanup
       - productivity
+    skip_upload: '{{ or .IsSnapshot (eq .Env.WINGET_TOKEN "") }}'
     repository:
       owner: entro314-labs
       name: winget-pkgs
       branch: "devkill-{{ .Version }}"
-      token: "{{ .Env.WINGET_GITHUB_TOKEN }}"
+      token: "{{ .Env.WINGET_TOKEN }}"
       pull_request:
         enabled: true
         base:
@@ -176,8 +241,36 @@ winget:
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
-    skip_upload: '{{ or .IsSnapshot (eq .Env.WINGET_GITHUB_TOKEN "") }}'
 
+# =============================================================================
+# AUR (Arch User Repository) — conditional on AUR_KEY
+# =============================================================================
+aurs:
+  - name: devkill-bin
+    ids:
+      - default
+    homepage: https://github.com/entro314-labs/devkill
+    description: "A modern TUI to find and delete heavy dev artifacts across languages and platforms."
+    maintainers:
+      - "entro314-labs"
+    license: MIT
+    disable: '{{ or .IsSnapshot (eq .Env.AUR_KEY "") }}'
+    private_key: "{{ .Env.AUR_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/devkill-bin.git"
+    provides:
+      - devkill
+    conflicts:
+      - devkill
+    package: |-
+      install -Dm755 "./devkill" "${pkgdir}/usr/bin/devkill"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/devkill/LICENSE"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+
+# =============================================================================
+# Linux packages (deb/rpm/apk)
+# =============================================================================
 nfpms:
   - id: packages
     package_name: devkill
@@ -193,15 +286,18 @@ nfpms:
       - apk
     bindir: /usr/bin
 
+# =============================================================================
+# Docker
+# =============================================================================
 dockers_v2:
   - ids:
       - devkill
     dockerfile: Dockerfile.goreleaser
     images:
-      - ghcr.io/entro314-labs/devkill
+      - "ghcr.io/entro314-labs/devkill"
     tags:
       - "{{ .Version }}"
-      - latest
+      - "latest"
       - "{{ .Version }}-amd64"
       - "{{ .Version }}-arm64"
     platforms:
@@ -217,16 +313,53 @@ dockers_v2:
       "org.opencontainers.image.version": "{{.Version}}"
       "org.opencontainers.image.source": "https://github.com/entro314-labs/devkill"
 
+# =============================================================================
+# Docker Signing (Cosign)
+# =============================================================================
+docker_signs:
+  - artifacts: all
+    stdin: "{{ .Env.COSIGN_PWD }}"
+
+# =============================================================================
+# SBOM (Software Bill of Materials)
+# =============================================================================
 sboms:
   - id: archive
     artifacts: archive
+    documents:
+      - "${artifact}.spdx.json"
   - id: source
     artifacts: source
+    documents:
+      - "${artifact}.spdx.json"
 
+# =============================================================================
+# Artifact Signing (Cosign)
+# =============================================================================
+signs:
+  - id: checksum-sign
+    artifacts: checksum
+    stdin: "{{ .Env.COSIGN_PWD }}"
+  - id: artifacts-sign
+    artifacts: all
+    stdin: "{{ .Env.COSIGN_PWD }}"
+
+# =============================================================================
+# Source archive
+# =============================================================================
 source:
   enabled: true
   name_template: "{{ .ProjectName }}_{{ .Version }}_source"
   format: tar.gz
 
+# =============================================================================
+# Metadata
+# =============================================================================
 metadata:
   mod_timestamp: '{{ .CommitTimestamp }}'
+
+# =============================================================================
+# Announcements — skip for patch releases
+# =============================================================================
+announce:
+  skip: "{{gt .Patch 0}}"

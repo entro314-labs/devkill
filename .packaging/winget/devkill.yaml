@@ -1,8 +1,8 @@
 # Winget manifest for devkill
-# To submit: Fork microsoft/winget-pkgs, add this to manifests/g/devkill/devkill/version/
+# To submit: Fork microsoft/winget-pkgs, add this to manifests/e/Entro314Labs/devkill/version/
 # Then create a pull request
 
-PackageIdentifier: devkill.devkill
+PackageIdentifier: Entro314Labs.devkill
 PackageVersion: 1.0.0  # Update this for each release
 DefaultLocale: en-US
 ManifestType: version
@@ -10,7 +10,7 @@ ManifestVersion: 1.6.0
 
 ---
 
-PackageIdentifier: devkill.devkill
+PackageIdentifier: Entro314Labs.devkill
 PackageVersion: 1.0.0
 PackageLocale: en-US
 Publisher: entro314-labs
@@ -23,23 +23,17 @@ License: MIT
 LicenseUrl: https://github.com/entro314-labs/devkill/blob/main/LICENSE
 Copyright: Copyright (c) 2025 entro314-labs
 CopyrightUrl: https://github.com/entro314-labs/devkill/blob/main/LICENSE
-ShortDescription: A concurrent Git repository management tool
+ShortDescription: A modern TUI to find and delete heavy dev artifacts across languages and platforms
 Description: |
-  devkill is a robust, concurrent Git repository management tool written in Go.
-  It allows you to perform bulk fetch or pull operations across multiple Git
-  repositories in a directory tree with configurable worker pools, safety features,
-  and detailed reporting.
+  devkill is a modern TUI to find and delete heavy dev artifacts across
+  languages and platforms.
 Moniker: devkill
 Tags:
-  - git
-  - repository
-  - management
-  - concurrent
-  - bulk
-  - fetch
-  - pull
   - cli
-  - tool
+  - developer-tools
+  - disk-cleanup
+  - productivity
+  - tui
   - go
   - golang
 ManifestType: defaultLocale
@@ -47,7 +41,7 @@ ManifestVersion: 1.6.0
 
 ---
 
-PackageIdentifier: devkill.devkill
+PackageIdentifier: Entro314Labs.devkill
 PackageVersion: 1.0.0
 Platform:
   - Windows.Desktop

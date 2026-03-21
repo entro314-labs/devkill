@@ -10,7 +10,7 @@
 pkgname=devkill
 pkgver=1.0.0
 pkgrel=1
-pkgdesc="A concurrent Git repository management tool written in Go"
+pkgdesc="A modern TUI to find and delete heavy dev artifacts across languages and platforms"
 arch=('x86_64' 'aarch64')
 url="https://github.com/entro314-labs/devkill"
 license=('MIT')
@@ -40,7 +40,7 @@ build() {
     go build \
         -ldflags "-s -w -X main.version=$pkgver -extldflags '$LDFLAGS'" \
         -o devkill \
-        ./cmd/devkill
+        .
 }
 
 check() {

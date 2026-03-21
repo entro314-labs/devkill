@@ -12,6 +12,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// Version information - populated at build time by GoReleaser
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
+)
+
 type stringFlag struct {
 	value string
 	set   bool
@@ -50,6 +58,7 @@ func main() {
 	var configPath stringFlag
 	var noConfirm bool
 	var listTargets bool
+	var showVersion bool
 
 	flag.Var(&includeTargets, "include", "Comma-separated additional target directory names to scan")
 	flag.Var(&excludeTargets, "exclude", "Comma-separated target directory names to skip")
@@ -57,7 +66,13 @@ func main() {
 	flag.Var(&configPath, "config", "Path to a JSON config file")
 	flag.BoolVar(&noConfirm, "no-confirm", false, "Delete without confirmation prompts")
 	flag.BoolVar(&listTargets, "list-targets", false, "Print target directories and exit")
+	flag.BoolVar(&showVersion, "version", false, "Show version information")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("devkill %s (commit: %s, built: %s, by: %s)\n", version, commit, date, builtBy)
+		return
+	}
 
 	root := "."
 	if flag.NArg() > 0 {
