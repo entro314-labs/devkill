@@ -683,7 +683,7 @@ func (m model) cleanupSummaryView() string {
 	}
 	lines = append(lines, ui.muted.Render("Completed at "+m.cleanup.CompletedAt.Format(time.Kitchen)))
 
-	return ui.base.Copy().Padding(0, 1).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	return ui.base.Padding(0, 1).Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
 func (m model) footerView() string {
