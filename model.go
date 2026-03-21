@@ -21,14 +21,15 @@ import (
 )
 
 type rowData struct {
-	RelPath   string
-	Target    string
-	Category  string
-	SizeBytes int64
-	SizeErr   string
-	Marked    bool
-	Deleted   bool
-	DeleteErr string
+	RelPath     string
+	Target      string
+	Category    string
+	SizeBytes   int64
+	SizeErr     string
+	SizePending bool
+	Marked      bool
+	Deleted     bool
+	DeleteErr   string
 }
 
 type sortMode int
@@ -78,6 +79,13 @@ type scanProgressMsg struct {
 	ID      int
 	Visited int
 	Found   int
+}
+
+type scanSizeMsg struct {
+	ID   int
+	Path string
+	Size int64
+	Err  error
 }
 
 type scanFinishedMsg struct {
@@ -372,6 +380,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.scanVisited = msg.Visited
 		m.scanFound = msg.Found
+		if m.scanStream != nil {
+			cmds = append(cmds, waitScanMsg(m.scanStream))
+		}
+	case scanSizeMsg:
+		if msg.ID != m.scanID {
+			break
+		}
+		if idx := m.findRow(msg.Path); idx != -1 {
+			m.rows[idx].SizePending = false
+			if msg.Err != nil {
+				m.rows[idx].SizeErr = msg.Err.Error()
+			} else {
+				m.rows[idx].SizeBytes = msg.Size
+				m.rows[idx].SizeErr = ""
+			}
+			m.setTableRows()
+		}
 		if m.scanStream != nil {
 			cmds = append(cmds, waitScanMsg(m.scanStream))
 		}
@@ -681,9 +706,10 @@ func (m *model) setTableRows() {
 	rows := make([]table.Row, 0, len(m.rows))
 	for _, row := range m.rows {
 		status := renderStatusCell(row)
+		sizeCell := formatSizeCell(row)
 		rows = append(rows, table.Row{
 			row.RelPath,
-			formatBytes(row.SizeBytes),
+			sizeCell,
 			row.Target,
 			row.Category,
 			status,
@@ -702,9 +728,18 @@ func renderStatusCell(row rowData) string {
 		return ui.accent.Render("QUEUED")
 	case row.SizeErr != "":
 		return ui.warning.Render("SIZE ERR")
+	case row.SizePending:
+		return ui.muted.Render("SIZING")
 	default:
 		return ui.muted.Render("READY")
 	}
+}
+
+func formatSizeCell(row rowData) string {
+	if row.SizePending {
+		return ui.muted.Render("…")
+	}
+	return formatBytes(row.SizeBytes)
 }
 
 func (m *model) sortRows() {
@@ -1009,6 +1044,8 @@ func (m *model) applyRecalcResult(msg recalcSizeMsg) {
 		return
 	}
 	m.rows[idx].SizeBytes = msg.Size
+	m.rows[idx].SizePending = false
+	m.rows[idx].SizeErr = ""
 	m.lastEvent = "Size recalculated"
 	m.setTableRows()
 }

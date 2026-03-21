@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -33,9 +32,8 @@ func defaultSkipDirs() map[string]struct{} {
 }
 
 type scanCandidate struct {
-	Index int
-	Path  string
-	Def   TargetDef
+	Path string
+	Def  TargetDef
 }
 
 type scanSizeResult struct {
@@ -68,8 +66,8 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 	visited := 0
 	found := 0
 	workers := defaultScanWorkers()
-	candidates := []scanCandidate{}
 	lastProgress := time.Now()
+	warningsMu := sync.Mutex{}
 
 	sendProgress := func(force bool) {
 		if force || time.Since(lastProgress) > 200*time.Millisecond {
@@ -80,6 +78,63 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 
 	maxDepth := opts.MaxDepth
 	rootFS := opts.RootHandle.FS()
+
+	jobs := make(chan scanCandidate, workers*8)
+	results := make(chan scanSizeResult, workers*8)
+
+	var workerWG sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		workerWG.Add(1)
+		go func() {
+			defer workerWG.Done()
+			for candidate := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+
+				size, sizeErr := dirSize(ctx, opts.RootHandle, candidate.Path)
+				if errors.Is(sizeErr, context.Canceled) {
+					return
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				case results <- scanSizeResult{Candidate: candidate, Size: size, Err: sizeErr}:
+				}
+			}
+		}()
+	}
+
+	doneResults := make(chan struct{})
+	go func() {
+		defer close(doneResults)
+		for result := range results {
+			if ctx.Err() != nil {
+				return
+			}
+
+			if result.Err != nil {
+				reason := classifyScanFailure(result.Err)
+				warningsMu.Lock()
+				warnings = append(warnings, fmt.Sprintf("size %s: %s (%v)", reason, filepath.FromSlash(result.Candidate.Path), result.Err))
+				warningsMu.Unlock()
+			}
+
+			msg := scanSizeMsg{
+				ID:   id,
+				Path: filepath.FromSlash(result.Candidate.Path),
+				Size: result.Size,
+				Err:  result.Err,
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case out <- msg:
+			}
+		}
+	}()
 
 	err := fs.WalkDir(rootFS, ".", func(path string, entry fs.DirEntry, err error) error {
 		if ctx.Err() != nil {
@@ -112,11 +167,25 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 
 			if def, ok := opts.Targets[name]; ok {
 				found++
-				candidates = append(candidates, scanCandidate{
-					Index: len(candidates),
-					Path:  path,
-					Def:   def,
-				})
+
+				row := rowData{
+					RelPath:     filepath.FromSlash(path),
+					Target:      def.Name,
+					Category:    def.Category,
+					SizePending: true,
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case out <- scanRowMsg{ID: id, Row: row}:
+				}
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case jobs <- scanCandidate{Path: path, Def: def}:
+				}
+
 				sendProgress(true)
 				return fs.SkipDir
 			}
@@ -129,31 +198,13 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 		err = nil
 	}
 
-	if err == nil && len(candidates) > 0 {
-		results := sizeTargetsConcurrently(ctx, opts, candidates, workers)
-		for _, result := range results {
-			if result.Err != nil {
-				reason := classifyScanFailure(result.Err)
-				warnings = append(warnings, fmt.Sprintf("size %s: %s (%v)", reason, filepath.FromSlash(result.Candidate.Path), result.Err))
-			}
-
-			row := rowData{
-				RelPath:   filepath.FromSlash(result.Candidate.Path),
-				Target:    result.Candidate.Def.Name,
-				Category:  result.Candidate.Def.Category,
-				SizeBytes: result.Size,
-			}
-			if result.Err != nil {
-				row.SizeErr = result.Err.Error()
-			}
-
-			out <- scanRowMsg{ID: id, Row: row}
-			sendProgress(true)
-		}
-	}
+	close(jobs)
+	workerWG.Wait()
+	close(results)
+	<-doneResults
 
 	sendProgress(true)
-	out <- scanFinishedMsg{
+	finished := scanFinishedMsg{
 		ID:       id,
 		Warnings: warnings,
 		Err:      err,
@@ -162,68 +213,12 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 		Found:    found,
 		Workers:  workers,
 	}
-}
 
-func sizeTargetsConcurrently(ctx context.Context, opts ScanOptions, candidates []scanCandidate, workers int) []scanSizeResult {
-	if len(candidates) == 0 {
-		return nil
+	select {
+	case <-ctx.Done():
+		return
+	case out <- finished:
 	}
-	if workers <= 0 {
-		workers = 1
-	}
-
-	jobs := make(chan scanCandidate)
-	results := make(chan scanSizeResult, len(candidates))
-
-	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for candidate := range jobs {
-				if ctx.Err() != nil {
-					return
-				}
-
-				size, err := dirSize(ctx, opts.RootHandle, candidate.Path)
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				case results <- scanSizeResult{Candidate: candidate, Size: size, Err: err}:
-				}
-			}
-		}()
-	}
-
-	go func() {
-		defer close(jobs)
-		for _, candidate := range candidates {
-			if ctx.Err() != nil {
-				return
-			}
-			jobs <- candidate
-		}
-	}()
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	output := make([]scanSizeResult, 0, len(candidates))
-	for result := range results {
-		output = append(output, result)
-	}
-
-	sort.Slice(output, func(i, j int) bool {
-		return output[i].Candidate.Index < output[j].Candidate.Index
-	})
-
-	return output
 }
 
 func classifyScanFailure(err error) string {
