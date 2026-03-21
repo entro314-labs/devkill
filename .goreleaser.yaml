@@ -316,9 +316,9 @@ dockers_v2:
 # =============================================================================
 # Docker Signing (Cosign)
 # =============================================================================
-docker_signs:
-  - artifacts: all
-    stdin: "{{ .Env.COSIGN_PWD }}"
+#docker_signs:
+ # - artifacts: all
+ #   stdin: "{{ .Env.COSIGN_PWD }}"
 
 # =============================================================================
 # SBOM (Software Bill of Materials)
@@ -336,13 +336,13 @@ sboms:
 # =============================================================================
 # Artifact Signing (Cosign)
 # =============================================================================
-signs:
-  - id: checksum-sign
-    artifacts: checksum
-    stdin: "{{ .Env.COSIGN_PWD }}"
-  - id: artifacts-sign
-    artifacts: all
-    stdin: "{{ .Env.COSIGN_PWD }}"
+#signs:
+#  - id: checksum-sign
+#    artifacts: checksum
+#    stdin: "{{ .Env.COSIGN_PWD }}"
+#  - id: artifacts-sign
+#    artifacts: all
+#    stdin: "{{ .Env.COSIGN_PWD }}"
 
 # =============================================================================
 # Source archive
