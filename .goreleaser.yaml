@@ -1,6 +1,6 @@
-# GoReleaser Configuration — devkill
+# GoReleaser Configuration - devkill
 # Features: multi-platform builds, Homebrew/Winget/AUR/Docker/nfpms,
-#           SBOM generation, Cosign signing, conditional secret guards
+#           SBOM generation, and conditional secret guards
 #
 # Documentation: https://goreleaser.com
 
@@ -9,13 +9,7 @@ version: 2
 project_name: devkill
 
 # =============================================================================
-# Environment
-# =============================================================================
-env:
-  - GO111MODULE=on
-
-# =============================================================================
-# Before hooks — go test acts as a release gate
+# Before hooks - go test acts as a release gate
 # =============================================================================
 before:
   hooks:
@@ -205,7 +199,7 @@ homebrew_casks:
       - devkill
 
 # =============================================================================
-# Winget (Windows Package Manager) — conditional on WINGET_TOKEN
+# Winget (Windows Package Manager) - conditional on WINGET_TOKEN
 # =============================================================================
 winget:
   - name: devkill
@@ -243,7 +237,7 @@ winget:
       email: bot@goreleaser.com
 
 # =============================================================================
-# AUR (Arch User Repository) — conditional on AUR_KEY
+# AUR (Arch User Repository) - conditional on AUR_KEY
 # =============================================================================
 aurs:
   - name: devkill-bin
@@ -314,13 +308,6 @@ dockers_v2:
       "org.opencontainers.image.source": "https://github.com/entro314-labs/devkill"
 
 # =============================================================================
-# Docker Signing (Cosign)
-# =============================================================================
-#docker_signs:
- # - artifacts: all
- #   stdin: "{{ .Env.COSIGN_PWD }}"
-
-# =============================================================================
 # SBOM (Software Bill of Materials)
 # =============================================================================
 sboms:
@@ -332,17 +319,6 @@ sboms:
     artifacts: source
     documents:
       - "${artifact}.spdx.json"
-
-# =============================================================================
-# Artifact Signing (Cosign)
-# =============================================================================
-#signs:
-#  - id: checksum-sign
-#    artifacts: checksum
-#    stdin: "{{ .Env.COSIGN_PWD }}"
-#  - id: artifacts-sign
-#    artifacts: all
-#    stdin: "{{ .Env.COSIGN_PWD }}"
 
 # =============================================================================
 # Source archive
@@ -359,7 +335,7 @@ metadata:
   mod_timestamp: '{{ .CommitTimestamp }}'
 
 # =============================================================================
-# Announcements — skip for patch releases
+# Announcements - skip for patch releases
 # =============================================================================
 announce:
   skip: "{{gt .Patch 0}}"

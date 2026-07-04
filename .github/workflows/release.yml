@@ -1,6 +1,6 @@
-# Release Workflow — devkill
-# Triggers on version tags (v*.*.*) and creates GitHub releases
-# Includes Cosign signing and post-release verification
+# Release Workflow - devkill
+# Triggers on version tags (v*.*.*) and creates GitHub releases.
+# Includes post-release verification for published artifacts.
 
 name: Release
 
@@ -9,11 +9,6 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to release (e.g., v1.0.0)'
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -77,9 +72,6 @@ jobs:
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@v0.24.0
 
-     # - name: Install Cosign
-     #   uses: sigstore/cosign-installer@v4.1.0
-
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -91,7 +83,6 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
-         # COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v7

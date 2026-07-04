@@ -48,7 +48,6 @@ Please include the following information in your report:
 ## Security Features
 
 ### Supply Chain Security
-- All releases are signed with Cosign
 - Published with SHA256 checksums for verification
 - SBOM (Software Bill of Materials) attached to every release
 - Dependencies monitored via `govulncheck` in CI
@@ -58,9 +57,6 @@ Please include the following information in your report:
 ```bash
 # Verify checksums
 sha256sum -c checksums.txt
-
-# Verify Cosign signatures (when cosign is configured)
-cosign verify-blob --signature checksums.txt.sig checksums.txt
 ```
 
 ## Dependencies

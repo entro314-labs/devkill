@@ -120,10 +120,5 @@ Configure these in GitHub repository secrets before your first publish:
 
 - `GITHUB_TOKEN` (provided by Actions for this repository)
 - `HOMEBREW_TAP_TOKEN` (required for Homebrew publishing; PAT with write access to your tap repository)
-- `AUR_SSH_PRIVATE_KEY` (optional; only needed to publish AUR)
-- `WINGET_GITHUB_TOKEN` (optional; only needed to publish Winget)
-
-### Homebrew note
-
-GoReleaser `brews` is deprecated; this project is configured with `homebrew_casks`.
-
+- `AUR_KEY` (optional; only needed to publish AUR)
+- `WINGET_TOKEN` (optional; only needed to publish Winget)

@@ -605,7 +605,7 @@ func (m model) headerView() string {
 	if m.loading {
 		root = ui.muted.Render(fmt.Sprintf("Root: %s", m.scanOpts.Root))
 	}
-	line := lipgloss.JoinHorizontal(lipgloss.Left, title, " ", ui.chip.Render(fmt.Sprintf("targets: %d", len(m.scanOpts.Targets))))
+	line := lipgloss.JoinHorizontal(lipgloss.Left, title, " ", ui.chip.Render(fmt.Sprintf("target names: %d", len(m.scanOpts.Targets))))
 	return ui.header.Render(lipgloss.JoinVertical(lipgloss.Left, line, lipgloss.JoinHorizontal(lipgloss.Left, subtitle, " · ", root)))
 }
 

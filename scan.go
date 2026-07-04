@@ -68,6 +68,11 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 	workers := defaultScanWorkers()
 	lastProgress := time.Now()
 	warningsMu := sync.Mutex{}
+	appendWarning := func(msg string) {
+		warningsMu.Lock()
+		warnings = append(warnings, msg)
+		warningsMu.Unlock()
+	}
 
 	sendProgress := func(force bool) {
 		if force || time.Since(lastProgress) > 200*time.Millisecond {
@@ -116,9 +121,7 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 
 			if result.Err != nil {
 				reason := classifyScanFailure(result.Err)
-				warningsMu.Lock()
-				warnings = append(warnings, fmt.Sprintf("size %s: %s (%v)", reason, filepath.FromSlash(result.Candidate.Path), result.Err))
-				warningsMu.Unlock()
+				appendWarning(fmt.Sprintf("size %s: %s (%v)", reason, filepath.FromSlash(result.Candidate.Path), result.Err))
 			}
 
 			msg := scanSizeMsg{
@@ -142,7 +145,7 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 		}
 		if err != nil {
 			if errors.Is(err, fs.ErrPermission) {
-				warnings = append(warnings, fmt.Sprintf("permission denied: %s", filepath.FromSlash(path)))
+				appendWarning(fmt.Sprintf("permission denied: %s", filepath.FromSlash(path)))
 				return fs.SkipDir
 			}
 			return err
@@ -203,10 +206,14 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 	close(results)
 	<-doneResults
 
+	warningsMu.Lock()
+	finishedWarnings := append([]string(nil), warnings...)
+	warningsMu.Unlock()
+
 	sendProgress(true)
 	finished := scanFinishedMsg{
 		ID:       id,
-		Warnings: warnings,
+		Warnings: finishedWarnings,
 		Err:      err,
 		Elapsed:  time.Since(start),
 		Visited:  visited,
