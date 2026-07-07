@@ -98,7 +98,9 @@ type scanFinishedMsg struct {
 	Workers  int
 }
 
-type scanPulseMsg struct{}
+type scanPulseMsg struct {
+	ID int
+}
 
 type recalcSizeMsg struct {
 	Path string
@@ -146,7 +148,8 @@ type keyMap struct {
 func newKeyMap() keyMap {
 	return keyMap{
 		ToggleMark: key.NewBinding(
-			key.WithKeys("space"),
+			// bubbletea reports the space key as " ", not "space".
+			key.WithKeys(" "),
 			key.WithHelp("space", "queue"),
 		),
 		MarkAll: key.NewBinding(
@@ -283,9 +286,21 @@ func NewModel(ctx context.Context, opts ScanOptions, confirmDeletes bool) model 
 		{Title: "Status", Width: 12},
 	}
 
+	// The table's default keymap binds space (page down), "d" (half page
+	// down), and "u" (half page up), which collide with queue/delete/recalc.
+	// Strip the conflicting keys so app actions do not also scroll the table.
+	tableKeys := table.DefaultKeyMap()
+	tableKeys.PageDown.SetKeys("f", "pgdown")
+	tableKeys.PageDown.SetHelp("f/pgdn", "page down")
+	tableKeys.HalfPageDown.SetKeys("ctrl+d")
+	tableKeys.HalfPageDown.SetHelp("ctrl+d", "½ page down")
+	tableKeys.HalfPageUp.SetKeys("ctrl+u")
+	tableKeys.HalfPageUp.SetHelp("ctrl+u", "½ page up")
+
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithFocused(true),
+		table.WithKeyMap(tableKeys),
 	)
 
 	styles := table.DefaultStyles()
@@ -332,7 +347,7 @@ func NewModel(ctx context.Context, opts ScanOptions, confirmDeletes bool) model 
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, scanStartCmd(m.scanCtx, m.scanOpts, m.scanID), scanPulseCmd())
+	return tea.Batch(m.spinner.Tick, scanStartCmd(m.scanCtx, m.scanOpts, m.scanID), scanPulseCmd(m.scanID))
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -389,10 +404,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if idx := m.findRow(msg.Path); idx != -1 {
 			m.rows[idx].SizePending = false
+			// Size is best-effort: on error it is the partial total of what
+			// could be read, which is still more truthful than zero.
+			m.rows[idx].SizeBytes = msg.Size
 			if msg.Err != nil {
 				m.rows[idx].SizeErr = msg.Err.Error()
 			} else {
-				m.rows[idx].SizeBytes = msg.Size
 				m.rows[idx].SizeErr = ""
 			}
 			m.setTableRows()
@@ -418,7 +435,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastEvent = fmt.Sprintf("Scan failed: %v", msg.Err)
 		}
 	case scanPulseMsg:
-		if m.loading {
+		if msg.ID == m.scanID && m.loading {
 			m.scanPulse += 0.06 * m.scanPulseDir
 			if m.scanPulse >= 1 {
 				m.scanPulse = 1
@@ -427,7 +444,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scanPulse = 0
 				m.scanPulseDir = 1
 			}
-			cmds = append(cmds, scanPulseCmd())
+			cmds = append(cmds, scanPulseCmd(m.scanID))
 		}
 	case deleteResultMsg:
 		nextCmd := m.applyDeleteResult(msg.Result)
@@ -449,6 +466,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "n", "N", "esc":
 				m.confirm = confirmState{}
 				m.lastEvent = "Deletion cancelled"
+			case "q", "ctrl+c":
+				if m.baseCancel != nil {
+					m.baseCancel()
+				}
+				return m, tea.Quit
 			}
 			break
 		}
@@ -462,6 +484,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
 		case key.Matches(msg, m.keys.Rescan):
+			// Rescanning mid-delete would reset rows and cleanup state while
+			// the delete chain is still emitting results, corrupting both.
+			if m.deleting {
+				m.lastEvent = "Cannot rescan while deleting"
+				break
+			}
 			var scanCmds []tea.Cmd
 			m, scanCmds = m.startScan()
 			cmds = append(cmds, scanCmds...)
@@ -539,13 +567,8 @@ func (m *model) updateLayout(width, height int) {
 	if m.width == width && m.height == height {
 		return
 	}
-	if m.width == 0 {
-		m.width = width
-		m.height = height
-	} else {
-		m.width = width
-		m.height = height
-	}
+	m.width = width
+	m.height = height
 
 	sizeWidth := 10
 	targetWidth := 16
@@ -594,7 +617,7 @@ func (m model) startScan() (model, []tea.Cmd) {
 	m.lastEvent = "Scanning…"
 	m.setTableRows()
 
-	cmds := []tea.Cmd{m.spinner.Tick, scanStartCmd(ctx, m.scanOpts, m.scanID), scanPulseCmd()}
+	cmds := []tea.Cmd{m.spinner.Tick, scanStartCmd(ctx, m.scanOpts, m.scanID), scanPulseCmd(m.scanID)}
 	return m, cmds
 }
 
@@ -602,9 +625,6 @@ func (m model) headerView() string {
 	title := ui.title.Render("devkill")
 	subtitle := ui.subtitle.Render("Modern cleanup for heavy dev artifacts")
 	root := ui.muted.Render(fmt.Sprintf("Root: %s", m.scanOpts.Root))
-	if m.loading {
-		root = ui.muted.Render(fmt.Sprintf("Root: %s", m.scanOpts.Root))
-	}
 	line := lipgloss.JoinHorizontal(lipgloss.Left, title, " ", ui.chip.Render(fmt.Sprintf("target names: %d", len(m.scanOpts.Targets))))
 	return ui.header.Render(lipgloss.JoinVertical(lipgloss.Left, line, lipgloss.JoinHorizontal(lipgloss.Left, subtitle, " · ", root)))
 }
@@ -838,7 +858,21 @@ func (m *model) clearMarks() {
 	m.setTableRows()
 }
 
+func (m *model) countPendingSizes(paths []string) int {
+	pending := 0
+	for _, path := range paths {
+		if idx := m.findRow(path); idx != -1 && m.rows[idx].SizePending {
+			pending++
+		}
+	}
+	return pending
+}
+
 func (m *model) requestDeleteSelected() tea.Cmd {
+	if m.deleting {
+		m.lastEvent = "Deletion already in progress"
+		return nil
+	}
 	if len(m.rows) == 0 {
 		return nil
 	}
@@ -850,6 +884,10 @@ func (m *model) requestDeleteSelected() tea.Cmd {
 	if row.Deleted {
 		return nil
 	}
+	if pending := m.countPendingSizes([]string{row.RelPath}); pending > 0 {
+		m.lastEvent = "Cannot delete while size is still calculating"
+		return nil
+	}
 	if m.confirmDeletes {
 		m.confirm = confirmState{active: true, action: confirmDeleteOne, paths: []string{row.RelPath}}
 		return nil
@@ -858,6 +896,10 @@ func (m *model) requestDeleteSelected() tea.Cmd {
 }
 
 func (m *model) requestDeleteMarked() tea.Cmd {
+	if m.deleting {
+		m.lastEvent = "Deletion already in progress"
+		return nil
+	}
 	paths := []string{}
 	for _, row := range m.rows {
 		if row.Marked && !row.Deleted {
@@ -868,6 +910,10 @@ func (m *model) requestDeleteMarked() tea.Cmd {
 		m.lastEvent = "Queue is empty"
 		return nil
 	}
+	if pending := m.countPendingSizes(paths); pending > 0 {
+		m.lastEvent = fmt.Sprintf("Cannot delete: %d queued item(s) still sizing", pending)
+		return nil
+	}
 	if m.confirmDeletes {
 		m.confirm = confirmState{active: true, action: confirmDeleteMarked, paths: paths}
 		return nil
@@ -876,6 +922,10 @@ func (m *model) requestDeleteMarked() tea.Cmd {
 }
 
 func (m *model) requestRecalcSelected() tea.Cmd {
+	if m.deleting {
+		m.lastEvent = "Deletion already in progress"
+		return nil
+	}
 	if len(m.rows) == 0 {
 		return nil
 	}
@@ -942,6 +992,10 @@ func (m *model) applyDeleteResult(result deleteResult) tea.Cmd {
 
 func (m *model) startDelete(paths []string) tea.Cmd {
 	if len(paths) == 0 || m.deleting {
+		return nil
+	}
+	if pending := m.countPendingSizes(paths); pending > 0 {
+		m.lastEvent = fmt.Sprintf("Cannot delete: %d item(s) still sizing", pending)
 		return nil
 	}
 	plannedBytes := int64(0)
@@ -1039,14 +1093,15 @@ func (m *model) applyRecalcResult(msg recalcSizeMsg) {
 	if idx == -1 {
 		return
 	}
-	if msg.Err != nil {
-		m.lastEvent = fmt.Sprintf("Recalc failed: %v", msg.Err)
-		return
-	}
 	m.rows[idx].SizeBytes = msg.Size
 	m.rows[idx].SizePending = false
-	m.rows[idx].SizeErr = ""
-	m.lastEvent = "Size recalculated"
+	if msg.Err != nil {
+		m.rows[idx].SizeErr = msg.Err.Error()
+		m.lastEvent = fmt.Sprintf("Recalc failed: %v", msg.Err)
+	} else {
+		m.rows[idx].SizeErr = ""
+		m.lastEvent = "Size recalculated"
+	}
 	m.setTableRows()
 }
 
@@ -1132,9 +1187,9 @@ func recalcSizeCmd(ctx context.Context, root *os.Root, relPath string) tea.Cmd {
 	}
 }
 
-func scanPulseCmd() tea.Cmd {
+func scanPulseCmd(id int) tea.Cmd {
 	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg {
-		return scanPulseMsg{}
+		return scanPulseMsg{ID: id}
 	})
 }
 

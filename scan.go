@@ -76,8 +76,13 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 
 	sendProgress := func(force bool) {
 		if force || time.Since(lastProgress) > 200*time.Millisecond {
-			out <- scanProgressMsg{ID: id, Visited: visited, Found: found}
-			lastProgress = time.Now()
+			// The receiver stops reading once the scan is superseded, so an
+			// unguarded send here would leak this goroutine forever.
+			select {
+			case <-ctx.Done():
+			case out <- scanProgressMsg{ID: id, Visited: visited, Found: found}:
+				lastProgress = time.Now()
+			}
 		}
 	}
 
@@ -146,6 +151,11 @@ func runScanStream(ctx context.Context, opts ScanOptions, id int, out chan<- tea
 		if err != nil {
 			if errors.Is(err, fs.ErrPermission) {
 				appendWarning(fmt.Sprintf("permission denied: %s", filepath.FromSlash(path)))
+				return fs.SkipDir
+			}
+			// Directories can disappear mid-scan (e.g. deleted from the UI
+			// while scanning); that must not fail the whole scan.
+			if errors.Is(err, fs.ErrNotExist) {
 				return fs.SkipDir
 			}
 			return err
@@ -256,6 +266,11 @@ func dirSize(ctx context.Context, root *os.Root, relPath string) (int64, error) 
 			return ctx.Err()
 		}
 		if err != nil {
+			// Match the main scan walk: unreadable or vanished subtrees are
+			// skipped so the rest of the entry is still sized.
+			if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {
+				return fs.SkipDir
+			}
 			return err
 		}
 		if entry.IsDir() {
@@ -266,16 +281,18 @@ func dirSize(ctx context.Context, root *os.Root, relPath string) (int64, error) 
 		}
 		info, infoErr := entry.Info()
 		if infoErr != nil {
+			if errors.Is(infoErr, fs.ErrPermission) || errors.Is(infoErr, fs.ErrNotExist) {
+				return nil
+			}
 			return infoErr
 		}
 		size += info.Size()
 		return nil
 	})
 
-	if err != nil {
-		return 0, err
-	}
-	return size, nil
+	// Return the partial total alongside any error so callers can show a
+	// best-effort size instead of zero.
+	return size, err
 }
 
 func relativeDepth(relPath string) int {

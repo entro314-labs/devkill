@@ -27,22 +27,17 @@ var defaultTargets = []TargetDef{
 	{Name: ".svelte", Category: "node"},
 	{Name: ".ember", Category: "node"},
 	{Name: ".meteor", Category: "node"},
+	// Note: bare framework names (express, koa, nestjs, …) are deliberately
+	// NOT targets. They name source directories, not build artifacts, and a
+	// "queue all + delete" run must never remove a user's project folder.
 	{Name: ".express", Category: "node"},
-	{Name: "express", Category: "node"},
 	{Name: ".koa", Category: "node"},
-	{Name: "koa", Category: "node"},
 	{Name: ".hapi", Category: "node"},
-	{Name: "hapi", Category: "node"},
 	{Name: ".sails.js", Category: "node"},
-	{Name: "sails.js", Category: "node"},
 	{Name: ".loopback", Category: "node"},
-	{Name: "loopback", Category: "node"},
 	{Name: ".adonisjs", Category: "node"},
-	{Name: "adonisjs", Category: "node"},
 	{Name: ".nestjs", Category: "node"},
-	{Name: "nestjs", Category: "node"},
 	{Name: ".feathersjs", Category: "node"},
-	{Name: "feathersjs", Category: "node"},
 
 	{Name: "target", Category: "rust"},
 	{Name: ".cargo", Category: "rust"},

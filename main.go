@@ -131,6 +131,10 @@ func main() {
 		excludes = parseTargetList(excludeTargets.value)
 	}
 	if maxDepth.set {
+		if maxDepth.value < 0 {
+			fmt.Fprintln(os.Stderr, "Error: --depth must be >= 0")
+			os.Exit(1)
+		}
 		depth = maxDepth.value
 	}
 
