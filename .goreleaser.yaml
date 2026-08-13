@@ -48,6 +48,8 @@ builds:
 # =============================================================================
 universal_binaries:
   - id: devkill-universal
+    ids:
+      - devkill
     name_template: devkill
     replace: true
 

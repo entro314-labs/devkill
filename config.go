@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Config struct {
@@ -34,7 +37,15 @@ func loadConfig(path string) (Config, error) {
 		return Config{}, fmt.Errorf("read config %s: %w", path, err)
 	}
 	var cfg Config
-	if err := json.Unmarshal(content, &cfg); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&cfg); err != nil {
+		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("multiple JSON values")
+		}
 		return Config{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	return cfg, nil
@@ -82,5 +93,35 @@ func normalizeConfig(cfg Config) (Config, error) {
 	if cfg.Depth < 0 {
 		return Config{}, errors.New("config: depth must be >= 0")
 	}
+	var err error
+	if cfg.Include, err = normalizeDirectoryNames("config include", cfg.Include); err != nil {
+		return Config{}, err
+	}
+	if cfg.Exclude, err = normalizeDirectoryNames("config exclude", cfg.Exclude); err != nil {
+		return Config{}, err
+	}
+	if cfg.Skip, err = normalizeDirectoryNames("config skip", cfg.Skip); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+func normalizeDirectoryNames(field string, names []string) ([]string, error) {
+	normalized := make([]string, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if name == "." || name == ".." || strings.ContainsAny(name, "/\\") || strings.ContainsRune(name, '\x00') {
+			return nil, fmt.Errorf("%s: %q must be a directory name, not a path", field, raw)
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		normalized = append(normalized, name)
+	}
+	return normalized, nil
 }

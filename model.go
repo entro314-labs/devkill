@@ -103,6 +103,7 @@ type scanPulseMsg struct {
 }
 
 type recalcSizeMsg struct {
+	ID   int
 	Path string
 	Size int64
 	Err  error
@@ -453,7 +454,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, nextCmd)
 		}
 	case recalcSizeMsg:
-		m.applyRecalcResult(msg)
+		if msg.ID == m.scanID {
+			m.applyRecalcResult(msg)
+		}
 	case tea.KeyMsg:
 		if m.confirm.active {
 			switch msg.String() {
@@ -477,6 +480,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch {
 		case key.Matches(msg, m.keys.Quit):
+			if m.deleting {
+				m.lastEvent = "Cannot quit while deletion is in progress"
+				break
+			}
 			if m.baseCancel != nil {
 				m.baseCancel()
 			}
@@ -682,7 +689,7 @@ func (m model) cleanupSummaryView() string {
 	}
 
 	summary := fmt.Sprintf(
-		"Freed %s (planned %s) · Deleted %d/%d · Failed %d · Duration %s",
+		"Estimated freed %s (last measured %s) · Deleted %d/%d · Failed %d · Duration %s",
 		formatBytes(m.cleanup.FreedBytes),
 		formatBytes(planned),
 		m.cleanup.Deleted,
@@ -937,8 +944,15 @@ func (m *model) requestRecalcSelected() tea.Cmd {
 	if row.Deleted {
 		return nil
 	}
+	if row.SizePending {
+		m.lastEvent = "Size calculation already in progress"
+		return nil
+	}
+	m.rows[idx].SizePending = true
+	m.rows[idx].SizeErr = ""
+	m.setTableRows()
 	m.lastEvent = "Recalculating size…"
-	return recalcSizeCmd(m.baseCtx, m.scanOpts.RootHandle, row.RelPath)
+	return recalcSizeCmd(m.baseCtx, m.scanOpts.RootHandle, m.scanID, row.RelPath)
 }
 
 func (m *model) applyDeleteResult(result deleteResult) tea.Cmd {
@@ -977,9 +991,9 @@ func (m *model) applyDeleteResult(result deleteResult) tea.Cmd {
 			m.cleanup.CompletedAt = time.Now()
 			m.cleanup.Duration = time.Since(m.deleteStart)
 			if m.deleteErrors > 0 {
-				m.lastEvent = fmt.Sprintf("Cleanup finished: %d deleted, %d failed, freed %s", m.cleanup.Deleted, m.cleanup.Failed, formatBytes(m.cleanup.FreedBytes))
+				m.lastEvent = fmt.Sprintf("Cleanup finished: %d deleted, %d failed, estimated freed %s", m.cleanup.Deleted, m.cleanup.Failed, formatBytes(m.cleanup.FreedBytes))
 			} else {
-				m.lastEvent = fmt.Sprintf("Cleanup complete: %d deleted, freed %s", m.cleanup.Deleted, formatBytes(m.cleanup.FreedBytes))
+				m.lastEvent = fmt.Sprintf("Cleanup complete: %d deleted, estimated freed %s", m.cleanup.Deleted, formatBytes(m.cleanup.FreedBytes))
 			}
 			return progressCmd
 		}
@@ -1180,10 +1194,10 @@ func deleteCmd(root *os.Root, relPath string) tea.Cmd {
 	}
 }
 
-func recalcSizeCmd(ctx context.Context, root *os.Root, relPath string) tea.Cmd {
+func recalcSizeCmd(ctx context.Context, root *os.Root, id int, relPath string) tea.Cmd {
 	return func() tea.Msg {
 		size, err := dirSize(ctx, root, relPath)
-		return recalcSizeMsg{Path: relPath, Size: size, Err: err}
+		return recalcSizeMsg{ID: id, Path: relPath, Size: size, Err: err}
 	}
 }
 
@@ -1210,6 +1224,9 @@ func validateDeletePath(relPath string) (string, error) {
 	}
 	if filepath.IsAbs(cleaned) {
 		return "", errors.New("delete: absolute paths are not allowed")
+	}
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) {
+		return "", errors.New("delete: path escapes root")
 	}
 	return cleaned, nil
 }

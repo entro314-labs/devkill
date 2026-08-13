@@ -67,7 +67,9 @@ Quit with `q`.
 
 ### Targets
 
-Built-in targets include `target`, `node_modules`, `.venv`, `.cache`, `.m2`, `.gradle`, `.cargo`, `.pub-cache`, `.gem`, `.nuget`, `.yarn`, `.pnpm`, `.pipenv`, `.poetry`, `.virtualenvs`, `vendor`, `dist`, `.turbo`, `.next`, `.nuxt`, `.expo`, `.react-native`, and more.
+Built-in targets include known generated artifacts such as `target`, `node_modules`, `.venv`, `__pycache__`, `.cache`, `.pub-cache`, `.dart_tool`, `vendor`, `dist`, `coverage`, `.turbo`, `.next`, `.nuxt`, `.expo`, and `.react-native`.
+
+The default list deliberately excludes directories that may mix caches with project or user configuration, including `.cargo`, `.yarn`, `.m2`, `.gradle`, `.nuget`, and `.gem`. Add one with `--include` or config only when deleting every matching directory below the scan root is safe.
 
 Run `devkill --list-targets` to see the full list.
 
@@ -81,11 +83,13 @@ The app looks for a config file in:
 
 Use `--config` to point to a specific file.
 
+Target and skip entries must be directory names, not paths. Unknown config keys are rejected so a misspelled destructive setting cannot be silently ignored.
+
 Example:
 
 ```json
 {
-	"include": [".idea", ".vscode"],
+	"include": [".parcel-cache"],
 	"exclude": ["dist"],
 	"depth": 6,
 	"skip": [".git", ".cache"],

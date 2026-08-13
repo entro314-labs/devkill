@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -215,10 +216,11 @@ func TestDirSize(t *testing.T) {
 		t.Fatalf("size = %d, want 350", size)
 	}
 
-	// Vanished paths are tolerated (best-effort, matches the scan walk).
+	// A vanished target must remain visible as a sizing failure. Treating it as
+	// a successful zero-byte measurement would present a stale row as ready.
 	size, err = dirSize(context.Background(), root, "missing")
-	if err != nil {
-		t.Fatalf("dirSize on missing path returned error: %v", err)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dirSize on missing path error = %v, want not-exist", err)
 	}
 	if size != 0 {
 		t.Fatalf("size for missing path = %d, want 0", size)

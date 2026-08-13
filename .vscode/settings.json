@@ -1,5 +1,5 @@
 {
-    "go.goroot": "/Users/dominikospritis/.local/share/mise/installs/go/1.26.4",
+    "go.goroot": "/Users/dominikospritis/.local/share/mise/installs/go/1.26.5",
     "debug.javascript.defaultRuntimeExecutable": {
         "pwa-node": "/Users/dominikospritis/.local/share/mise/shims/node"
     },

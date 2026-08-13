@@ -280,6 +280,24 @@ func TestRequestsBlockedWhileDeleting(t *testing.T) {
 	}
 }
 
+func TestQuitBlockedWhileDeleting(t *testing.T) {
+	m := newTestModel(t, testRows(1))
+	m.deleting = true
+
+	updated, cmd := m.Update(runeKey('q'))
+	m = updated.(model)
+
+	if cmd != nil {
+		t.Fatal("quit returned a command while deletion was in progress")
+	}
+	if !m.deleting {
+		t.Fatal("quit changed deletion state")
+	}
+	if m.lastEvent != "Cannot quit while deletion is in progress" {
+		t.Fatalf("lastEvent = %q", m.lastEvent)
+	}
+}
+
 func TestRescanBlockedWhileDeleting(t *testing.T) {
 	m := newTestModel(t, testRows(2))
 	m.deleting = true
@@ -363,6 +381,8 @@ func TestValidateDeletePath(t *testing.T) {
 		{name: "dot", path: ".", wantErr: true},
 		{name: "collapses to dot", path: "a/..", wantErr: true},
 		{name: "absolute", path: absDir, wantErr: true},
+		{name: "parent", path: "..", wantErr: true},
+		{name: "parent traversal", path: filepath.Join("..", "victim"), wantErr: true},
 		{name: "simple", path: "node_modules", want: "node_modules"},
 		{name: "nested", path: "a/b/node_modules", want: filepath.Clean("a/b/node_modules")},
 	}
@@ -472,6 +492,24 @@ func TestApplyRecalcResultRecordsPartialSizeAndError(t *testing.T) {
 	}
 }
 
+func TestRecalcEntersPendingStateAndBlocksDelete(t *testing.T) {
+	m := newTestModel(t, testRows(1))
+
+	cmd := (&m).requestRecalcSelected()
+	if cmd == nil {
+		t.Fatal("recalculation did not start")
+	}
+	if !m.rows[0].SizePending {
+		t.Fatal("row did not enter sizing state")
+	}
+	if deleteCmd := (&m).requestDeleteSelected(); deleteCmd != nil {
+		t.Fatal("delete command started during recalculation")
+	}
+	if m.confirm.active || m.deleting {
+		t.Fatal("delete flow advanced during recalculation")
+	}
+}
+
 func TestStaleScanMessagesIgnored(t *testing.T) {
 	m := newTestModel(t, testRows(1))
 	staleID := m.scanID - 1
@@ -486,6 +524,13 @@ func TestStaleScanMessagesIgnored(t *testing.T) {
 	m = updated.(model)
 	if m.err != nil {
 		t.Fatal("stale scanFinishedMsg overwrote model error state")
+	}
+
+	originalSize := m.rows[0].SizeBytes
+	updated, _ = m.Update(recalcSizeMsg{ID: staleID, Path: m.rows[0].RelPath, Size: 9999})
+	m = updated.(model)
+	if m.rows[0].SizeBytes != originalSize {
+		t.Fatal("stale recalculation overwrote current scan state")
 	}
 }
 

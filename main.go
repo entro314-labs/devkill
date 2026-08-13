@@ -137,6 +137,14 @@ func main() {
 		}
 		depth = maxDepth.value
 	}
+	if includes, err = normalizeDirectoryNames("--include", includes); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
+	}
+	if excludes, err = normalizeDirectoryNames("--exclude", excludes); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
+	}
 
 	skip := mergeSkipDirs(defaultSkipDirs(), config.Skip)
 	targets := buildTargetMapWithList(includes, excludes)

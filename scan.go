@@ -266,6 +266,9 @@ func dirSize(ctx context.Context, root *os.Root, relPath string) (int64, error) 
 			return ctx.Err()
 		}
 		if err != nil {
+			if path == relSlash {
+				return err
+			}
 			// Match the main scan walk: unreadable or vanished subtrees are
 			// skipped so the rest of the entry is still sized.
 			if errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist) {

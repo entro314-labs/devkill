@@ -23,7 +23,7 @@ func TestNormalizeConfigRejectsNegativeDepth(t *testing.T) {
 func TestLoadConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	content := `{"include":[".idea"],"exclude":["dist"],"depth":6,"skip":[".git"],"confirm":false}`
+	content := `{"include":[".parcel-cache"],"exclude":["dist"],"depth":6,"skip":[".git"],"confirm":false}`
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestLoadConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
-	if !reflect.DeepEqual(cfg.Include, []string{".idea"}) || !reflect.DeepEqual(cfg.Exclude, []string{"dist"}) {
+	if !reflect.DeepEqual(cfg.Include, []string{".parcel-cache"}) || !reflect.DeepEqual(cfg.Exclude, []string{"dist"}) {
 		t.Fatalf("include/exclude = %v / %v", cfg.Include, cfg.Exclude)
 	}
 	if cfg.Depth != 6 {
@@ -52,6 +52,22 @@ func TestLoadConfig(t *testing.T) {
 	}
 	if _, err := loadConfig(bad); err == nil {
 		t.Fatal("malformed config accepted")
+	}
+
+	unknown := filepath.Join(dir, "unknown.json")
+	if err := os.WriteFile(unknown, []byte(`{"confrm":false}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadConfig(unknown); err == nil {
+		t.Fatal("unknown config key accepted")
+	}
+
+	multiple := filepath.Join(dir, "multiple.json")
+	if err := os.WriteFile(multiple, []byte(`{} {}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadConfig(multiple); err == nil {
+		t.Fatal("multiple JSON values accepted")
 	}
 }
 
@@ -89,7 +105,7 @@ func TestMergeSkipDirs(t *testing.T) {
 }
 
 func TestBuildTargetMapWithList(t *testing.T) {
-	targets := buildTargetMapWithList([]string{".idea", ""}, []string{"dist", "node_modules"})
+	targets := buildTargetMapWithList([]string{".parcel-cache", ""}, []string{"dist", "node_modules"})
 
 	if _, ok := targets["node_modules"]; ok {
 		t.Error("excluded built-in target still present")
@@ -97,7 +113,7 @@ func TestBuildTargetMapWithList(t *testing.T) {
 	if _, ok := targets["dist"]; ok {
 		t.Error("excluded built-in target still present")
 	}
-	custom, ok := targets[".idea"]
+	custom, ok := targets[".parcel-cache"]
 	if !ok {
 		t.Fatal("included custom target missing")
 	}
@@ -110,12 +126,18 @@ func TestBuildTargetMapWithList(t *testing.T) {
 }
 
 func TestDefaultTargetsExcludeSourceDirectoryNames(t *testing.T) {
-	// Bare framework names are real-world source/project directory names.
-	// Listing them as deletable artifacts would let "queue all + delete"
-	// destroy user code.
+	// Source directories and mixed cache/configuration directories cannot be
+	// defaults because "queue all + delete" must be safe without exclusions.
 	forbidden := []string{
 		"express", "koa", "hapi", "sails.js", "loopback",
-		"adonisjs", "nestjs", "feathersjs", "src", "lib", "app",
+		"adonisjs", "nestjs", "feathersjs", "src", "lib", "app", "env",
+		"build", "out",
+		".cargo", ".yarn", ".m2", ".gradle", ".nuget", ".gem",
+		".vue", ".svelte", ".ember", ".meteor", ".django", ".flask",
+		".rails", ".laravel", ".symfony", ".yii", ".codeigniter",
+		".cakephp", ".zend", ".phalcon", ".slim", ".fuelphp",
+		".lumen", ".silex", ".express", ".koa", ".hapi", ".sails.js",
+		".loopback", ".adonisjs", ".nestjs", ".feathersjs",
 	}
 	names := map[string]struct{}{}
 	for _, def := range defaultTargets {
@@ -125,6 +147,24 @@ func TestDefaultTargetsExcludeSourceDirectoryNames(t *testing.T) {
 		if _, ok := names[name]; ok {
 			t.Errorf("default targets contain source directory name %q", name)
 		}
+	}
+}
+
+func TestNormalizeDirectoryNames(t *testing.T) {
+	got, err := normalizeDirectoryNames("test", []string{" node_modules ", "dist", "node_modules", ""})
+	if err != nil {
+		t.Fatalf("valid names rejected: %v", err)
+	}
+	if !reflect.DeepEqual(got, []string{"node_modules", "dist"}) {
+		t.Fatalf("normalized names = %v", got)
+	}
+
+	for _, invalid := range []string{".", "..", "../cache", "a/b", `a\b`} {
+		t.Run(invalid, func(t *testing.T) {
+			if _, err := normalizeDirectoryNames("test", []string{invalid}); err == nil {
+				t.Fatalf("path-like directory name %q accepted", invalid)
+			}
+		})
 	}
 }
 

@@ -10,12 +10,13 @@ type TargetDef struct {
 	Category string
 }
 
+// Defaults must be safe for "queue all": every name here represents a
+// directory that is expected to be reproducible. Mixed cache/configuration
+// directories remain available through explicit includes.
 var defaultTargets = []TargetDef{
 	{Name: "node_modules", Category: "node"},
-	{Name: ".pnpm", Category: "node"},
 	{Name: ".pnpm-store", Category: "node"},
 	{Name: "pnpm-store", Category: "node"},
-	{Name: ".yarn", Category: "node"},
 	{Name: "bower_components", Category: "node"},
 	{Name: ".turbo", Category: "node"},
 	{Name: ".next", Category: "node"},
@@ -23,68 +24,24 @@ var defaultTargets = []TargetDef{
 	{Name: ".expo", Category: "node"},
 	{Name: ".react-native", Category: "node"},
 	{Name: ".angular", Category: "node"},
-	{Name: ".vue", Category: "node"},
-	{Name: ".svelte", Category: "node"},
-	{Name: ".ember", Category: "node"},
-	{Name: ".meteor", Category: "node"},
-	// Note: bare framework names (express, koa, nestjs, …) are deliberately
-	// NOT targets. They name source directories, not build artifacts, and a
-	// "queue all + delete" run must never remove a user's project folder.
-	{Name: ".express", Category: "node"},
-	{Name: ".koa", Category: "node"},
-	{Name: ".hapi", Category: "node"},
-	{Name: ".sails.js", Category: "node"},
-	{Name: ".loopback", Category: "node"},
-	{Name: ".adonisjs", Category: "node"},
-	{Name: ".nestjs", Category: "node"},
-	{Name: ".feathersjs", Category: "node"},
 
 	{Name: "target", Category: "rust"},
-	{Name: ".cargo", Category: "rust"},
 
 	{Name: ".venv", Category: "python"},
 	{Name: "venv", Category: "python"},
-	{Name: "env", Category: "python"},
 	{Name: ".virtualenvs", Category: "python"},
 	{Name: "__pycache__", Category: "python"},
 	{Name: ".pytest_cache", Category: "python"},
 	{Name: ".mypy_cache", Category: "python"},
 	{Name: ".ruff_cache", Category: "python"},
 	{Name: ".tox", Category: "python"},
-	{Name: ".pip", Category: "python"},
-	{Name: ".pipenv", Category: "python"},
-	{Name: ".poetry", Category: "python"},
-	{Name: ".django", Category: "python"},
-	{Name: ".flask", Category: "python"},
-
-	{Name: ".gradle", Category: "java"},
-	{Name: ".m2", Category: "java"},
-	{Name: ".ivy2", Category: "java"},
-	{Name: ".nuget", Category: "dotnet"},
 
 	{Name: ".pub-cache", Category: "dart"},
 	{Name: ".dart_tool", Category: "dart"},
 
-	{Name: ".gem", Category: "ruby"},
-	{Name: ".rails", Category: "ruby"},
-
-	{Name: ".laravel", Category: "php"},
-	{Name: ".symfony", Category: "php"},
-	{Name: ".yii", Category: "php"},
-	{Name: ".codeigniter", Category: "php"},
-	{Name: ".cakephp", Category: "php"},
-	{Name: ".zend", Category: "php"},
-	{Name: ".phalcon", Category: "php"},
-	{Name: ".slim", Category: "php"},
-	{Name: ".fuelphp", Category: "php"},
-	{Name: ".lumen", Category: "php"},
-	{Name: ".silex", Category: "php"},
-
 	{Name: "vendor", Category: "go"},
 	{Name: ".cache", Category: "build"},
 	{Name: "dist", Category: "build"},
-	{Name: "build", Category: "build"},
-	{Name: "out", Category: "build"},
 	{Name: "coverage", Category: "build"},
 }
 
